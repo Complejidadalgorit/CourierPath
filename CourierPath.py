@@ -10,10 +10,10 @@ from reflex.vars import Var
 
 # --- Definición de URLs de los CSVs ---
 URL_SUCURSALES = (
-    "https://raw.githubusercontent.com/MQRF123/Complejidad_algoritmica/refs/heads/main/sucursales.csv"
+    "https://raw.githubusercontent.com/Complejidadalgorit/Datasets/refs/heads/main/sucursales.csv"
 )
 URL_DESTINOS = (
-    "https://raw.githubusercontent.com/MQRF123/Complejidad_algoritmica/refs/heads/main/destinos.csv"
+    "https://raw.githubusercontent.com/Complejidadalgorit/Datasets/refs/heads/main/destinos.csv"
 )
 
 # --- Función para leer CSVs (robusta) ---
@@ -32,13 +32,27 @@ destinos_df   = leer_datos_csv(URL_DESTINOS)
 if sucursales_df.empty or destinos_df.empty:
     raise ValueError("No se cargaron correctamente las sucursales o destinos.")
 
+sucursales_df['latitud']  = sucursales_df['latitud'].astype(float)
+sucursales_df['longitud'] = sucursales_df['longitud'].astype(float)
+destinos_df['latitud']     = destinos_df['latitud'].astype(float)
+destinos_df['longitud']    = destinos_df['longitud'].astype(float)
+
+# Verificar carga
+if sucursales_df.empty or destinos_df.empty:
+    raise ValueError("No se cargaron correctamente las sucursales o destinos.")
+
 # --- Función de Haversine para distancia en km ---
-def haversine(lon1, lat1, lon2, lat2) -> float:
+def haversine(lon1: float, lat1: float, lon2: float, lat2: float) -> float:
     lon1, lat1, lon2, lat2 = map(radians, [lon1, lat1, lon2, lat2])
     dlon = lon2 - lon1
     dlat = lat2 - lat1
     a = sin(dlat/2)**2 + cos(lat1)*cos(lat2)*sin(dlon/2)**2
     return 6371 * 2 * asin(sqrt(a))
+
+# --- (Opcional) Auxiliar para nodos ---
+def haversine_from_nodes(a, b) -> float:
+    # a = (lat, lon, name), b igual
+    return haversine(a[1], a[0], b[1], b[0])
 
 # --- Algoritmos: Held-Karp (TSP exacto) y Dijkstra ---
 def held_karp(dist_matrix: np.ndarray) -> Tuple[list, float]:
@@ -91,7 +105,7 @@ class State(rx.State):
     sucursales = sucursales_df.to_dict('records')
     destinos   = destinos_df.to_dict('records')
     selected_sucursal = ""
-    destinos_individuales: list[str] = [""] * 15  # ✅ declaración obligatoria
+    destinos_individuales: list[str] = [""] * 15
     algorithm = "TSP"
     route_coords: list = []
     segment_info: list = []
@@ -108,11 +122,10 @@ class State(rx.State):
 
     @rx.var
     def algorithm_options(self) -> list:
-        return ["TSP", "Dijkstra", "TCP"]
+        return ["TSP", "Dijkstra"]
     
     def set_individual_destino(self, index: int, value: str):
         self.destinos_individuales[index] = value
-
 
     @rx.var
     def summary(self) -> str:
@@ -129,22 +142,18 @@ class State(rx.State):
 
     def set_selected_sucursal(self, nombre: str):
         self.selected_sucursal = nombre
-        self.destinos_individuales = [""] * 15  # ✅ Limpiar los 15 selects
+        self.destinos_individuales = [""] * 15
         self.route_coords = []
         self.segment_info = []
 
     def set_selected_destinos(self, ds):
-    # Asegura que sea una lista aunque se reciba un string
         if isinstance(ds, str):
             ds = [ds]
         elif not isinstance(ds, list):
-            ds = list(ds)  # Por si es un set u otro iterable
-
+            ds = list(ds)
         self.selected_destinos = ds[:15]
         self.route_coords = []
         self.segment_info = []
-
-
 
     def set_algorithm(self, alg: str):
         self.algorithm = alg
@@ -176,9 +185,9 @@ class State(rx.State):
         for i in range(n):
             for j in range(n):
                 if i != j:
+                    # llamada CORRECTA a haversine
                     dm[i, j] = haversine(nodos[i][1], nodos[i][0], nodos[j][1], nodos[j][0])
 
-        # --- Algoritmo según selección ---
         coords = []
         info = []
         dist_total = 0.0
@@ -239,11 +248,10 @@ class State(rx.State):
             info.append(f"{nodos[actual][2]} → {nodos[0][2]}: {retorno:.2f} km, {t:.0f} min")
             coords.append((nodos[0][0], nodos[0][1]))
 
-        self.route_coords = coords
-        self.segment_info = info
-        self.total_distance = dist_total
-        self.total_time = tiempo_total
-
+        self.route_coords    = coords
+        self.segment_info    = info
+        self.total_distance  = dist_total
+        self.total_time      = tiempo_total
 
     @rx.var
     def updated_map_figure(self) -> Figure:
@@ -269,7 +277,7 @@ def index() -> rx.Component:
     return rx.box(
         rx.hstack(
             rx.select(
-                State.algorithm_options,  # opcional si quieres mantenerlo
+                State.algorithm_options,
                 placeholder="Algoritmo",
                 on_change=State.set_algorithm,
                 width='25%', searchable=True
@@ -307,4 +315,3 @@ def index() -> rx.Component:
 # --- Creación y ejecución de la app ---
 app = rx.App()
 app.add_page(index, on_load=State.reset_state)
-
